@@ -1,0 +1,1356 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Real-time Monitoring Hub (SRMH)</title>
+    <meta name="description" content="Hệ thống theo dõi sinh viên thời gian thực">
+
+    <!-- Tailwind CSS - Load đầu tiên -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .status-green {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
+        .status-yellow {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        }
+
+        .status-red {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        }
+
+        .card-hover {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        .timeline-item {
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 50;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: .5;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
+
+    <!-- Login Screen -->
+    <div id="loginScreen" class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+            <div class="text-center mb-8">
+                <h1
+                    class="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+                    SRMH
+                </h1>
+                <p class="text-gray-600">Student Real-time Monitoring Hub</p>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Mã truy cập</label>
+                    <input type="text" id="accessCode" placeholder="Nhập mã truy cập..."
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                        onkeypress="if(event.key === 'Enter') login()">
+                </div>
+                <button onclick="login()"
+                    class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-lg font-bold hover:shadow-lg transition transform hover:scale-105">
+                    Đăng nhập
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="mainApp" class="hidden">
+        <!-- Header -->
+        <header class="bg-white shadow-sm sticky top-0 z-40">
+            <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-800">🎓 SRMH Dashboard</h1>
+                    <p class="text-sm text-gray-600">Vai trò: <span id="userRole" class="font-semibold"></span></p>
+                </div>
+                <div class="flex gap-2">
+                    <button id="exportButton" onclick="openExportModal()"
+                        class="hidden px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:shadow-lg transition transform hover:scale-105 font-semibold">
+                        📄 Xuất báo cáo
+                    </button>
+                    <button onclick="logout()"
+                        class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">
+                        Đăng xuất
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Admin Import Section -->
+        <!-- Admin Import Section Removed -->
+
+        <!-- Filters & Stats -->
+        <div class="max-w-7xl mx-auto px-4 py-6">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white rounded-xl shadow-lg p-4 card-hover">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-600">Tổng số SV</p>
+                            <p id="totalStudents" class="text-2xl font-bold text-gray-800">0</p>
+                        </div>
+                        <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                            <span class="text-2xl">👥</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-lg p-4 card-hover cursor-pointer"
+                    onclick="filterByStatus('green')">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-600">Ổn định</p>
+                            <p id="greenCount" class="text-2xl font-bold text-green-600">0</p>
+                        </div>
+                        <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                            <span class="text-2xl">🟢</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-lg p-4 card-hover cursor-pointer"
+                    onclick="filterByStatus('yellow')">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-600">Theo dõi</p>
+                            <p id="yellowCount" class="text-2xl font-bold text-yellow-600">0</p>
+                        </div>
+                        <div class="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+                            <span class="text-2xl">🟡</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-lg p-4 card-hover cursor-pointer"
+                    onclick="filterByStatus('red')">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-600">Cảnh báo</p>
+                            <p id="redCount" class="text-2xl font-bold text-red-600">0</p>
+                        </div>
+                        <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                            <span class="text-2xl pulse">🔴</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search & Filter -->
+            <div class="bg-white rounded-xl shadow-lg p-4 mb-6">
+                <div class="flex flex-col md:flex-row gap-4">
+                    <input type="text" id="searchInput" placeholder="🔍 Tìm kiếm theo MSSV hoặc Họ tên..."
+                        class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                        oninput="searchStudents()" />
+                    <div class="flex gap-2">
+                        <button onclick="filterByStatus('attention')"
+                            class="px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-lg hover:shadow-lg transition transform hover:scale-105 font-semibold">
+                            ⚠️ Cần chăm sóc
+                        </button>
+                        <button onclick="filterByStatus('all')"
+                            class="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
+                            Hiện tất cả
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pagination Controls -->
+            <div class="bg-white rounded-xl shadow-lg p-4 mb-4">
+                <div class="flex flex-col md:flex-row justify-between items-center gap-3">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm text-gray-700">Hiển thị:</span>
+                        <select id="itemsPerPage" onchange="changeItemsPerPage()"
+                            class="px-3 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                            <option value="20" selected>20</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                        <span class="text-sm text-gray-700">sinh viên/trang</span>
+                    </div>
+                    <div id="paginationInfo" class="text-sm text-gray-600"></div>
+                </div>
+            </div>
+
+            <!-- Student List -->
+            <div id="studentList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                <!-- Students will be rendered here -->
+            </div>
+
+            <!-- Pagination Buttons -->
+            <div id="paginationButtons" class="flex justify-center gap-2 flex-wrap"></div>
+        </div>
+    </div>
+
+    <!-- Student Detail Modal -->
+    <div id="studentModal" class="modal">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6">
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <h2 id="modalStudentName" class="text-2xl font-bold mb-1"></h2>
+                        <p id="modalStudentInfo" class="text-blue-100"></p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="exportStudentReport(currentStudentId)"
+                            class="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition backdrop-blur-sm"
+                            title="Xuất báo cáo sinh viên này">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z">
+                                </path>
+                            </svg>
+                            <span class="text-sm font-semibold">Xuất báo cáo</span>
+                        </button>
+                        <button onclick="closeModal()"
+                            class="text-white hover:text-gray-200 text-3xl leading-none">&times;</button>
+                    </div>
+                </div>
+
+                <div id="statusSelector" class="hidden mt-4">
+                    <p class="text-sm text-blue-100 mb-2">Cập nhật trạng thái:</p>
+                    <div class="flex gap-2">
+                        <button onclick="updateStudentStatus('green')"
+                            class="px-4 py-2 bg-green-500 rounded-lg hover:bg-green-600 transition">
+                            🟢 Ổn định
+                        </button>
+                        <button onclick="updateStudentStatus('yellow')"
+                            class="px-4 py-2 bg-yellow-500 rounded-lg hover:bg-yellow-600 transition">
+                            🟡 Theo dõi
+                        </button>
+                        <button onclick="updateStudentStatus('red')"
+                            class="px-4 py-2 bg-red-500 rounded-lg hover:bg-red-600 transition">
+                            🔴 Cảnh báo
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="feedbackTimeline" class="flex-1 overflow-y-auto p-6 bg-gray-50">
+                <p class="text-gray-500 text-center">Chưa có phản hồi nào</p>
+            </div>
+
+            <div class="p-4 bg-white border-t border-gray-200">
+                <div class="flex gap-2">
+                    <input type="text" id="feedbackInput" placeholder="Nhập phản hồi..."
+                        class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                        onkeypress="if(event.key==='Enter') sendFeedback()" />
+                    <button onclick="sendFeedback()"
+                        class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold">
+                        Gửi
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Report Modal -->
+    <div id="exportModal" class="modal">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4">
+            <div class="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-6 rounded-t-2xl">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h2 class="text-2xl font-bold mb-1">📄 Xuất báo cáo</h2>
+                        <p class="text-green-100 text-sm">Chọn loại báo cáo bạn muốn xuất</p>
+                    </div>
+                    <button onclick="closeExportModal()"
+                        class="text-white hover:text-gray-200 text-2xl">&times;</button>
+                </div>
+            </div>
+
+            <div class="p-6 space-y-3">
+                <button onclick="exportReport('overview')"
+                    class="w-full px-6 py-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:shadow-lg transition transform hover:scale-105 text-left">
+                    <div class="flex items-center gap-3">
+                        <span class="text-2xl">📊</span>
+                        <div>
+                            <div class="font-semibold">Báo cáo tổng quan</div>
+                            <div class="text-xs text-blue-100">Thống kê trạng thái toàn bộ sinh viên</div>
+                        </div>
+                    </div>
+                </button>
+
+                <button onclick="exportReport('by-class')"
+                    class="w-full px-6 py-4 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg hover:shadow-lg transition transform hover:scale-105 text-left">
+                    <div class="flex items-center gap-3">
+                        <span class="text-2xl">🏫</span>
+                        <div>
+                            <div class="font-semibold">Báo cáo theo lớp</div>
+                            <div class="text-xs text-purple-100">Thống kê từng lớp học</div>
+                        </div>
+                    </div>
+                </button>
+
+                <button onclick="exportReport('detailed')"
+                    class="w-full px-6 py-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:shadow-lg transition transform hover:scale-105 text-left">
+                    <div class="flex items-center gap-3">
+                        <span class="text-2xl">📝</span>
+                        <div>
+                            <div class="font-semibold">Báo cáo chi tiết</div>
+                            <div class="text-xs text-orange-100">Danh sách sinh viên và feedback</div>
+                        </div>
+                    </div>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CORE JAVASCRIPT - Load đầu tiên, không phụ thuộc vào thư viện ngoài -->
+    <script>
+        console.log('=== SRMH Core Loading ===');
+
+        // ==================== CONFIGURATION ====================
+        const SUPABASE_URL = 'https://vhdawfnayouqcxsmqwdr.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZoZGF3Zm5heW91cWN4c21xd2RyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk0OTA0MTYsImV4cCI6MjA4NTA2NjQxNn0._hdq6-etSdGp2vkyY-TrNI-Xm2C7IPZ8hQoRQXCdQlE';
+
+        const ACCESS_CODES = {
+            'ADMIN2026': 'Admin',
+            'GV2026': 'Giảng viên',
+            'CTSV2026': 'CTSV'
+        };
+
+        // COLUMN_MAPPING Removed
+
+        // ==================== STATE ====================
+        let currentUser = null;
+        let currentStudentId = null;
+        let allStudents = [];
+        let currentFilter = 'all';
+        let currentPage = 1;
+        let itemsPerPage = 20;
+        let supabase = null;
+
+        // ==================== AUTH (KHÔNG PHỤ THUỘC SUPABASE) ====================
+        function login() {
+            console.log('=== Login ===');
+            const code = document.getElementById('accessCode').value.trim();
+            console.log('Code:', code);
+
+            if (ACCESS_CODES[code]) {
+                console.log('✅ Valid code');
+                currentUser = { code, role: ACCESS_CODES[code] };
+
+                document.getElementById('loginScreen').classList.add('hidden');
+                document.getElementById('mainApp').classList.remove('hidden');
+                document.getElementById('userRole').textContent = currentUser.role;
+
+                if (currentUser.role === 'Admin') {
+                    document.getElementById('adminSection').classList.remove('hidden');
+                } else {
+                    // Hiển thị nút xuất báo cáo cho GV và CTSV
+                    document.getElementById('exportButton').classList.remove('hidden');
+                }
+
+                // Load students nếu Supabase đã sẵn sàng
+                if (supabase) {
+                    loadStudents();
+                    setupRealtimeSubscription();
+                } else {
+                    console.warn('⚠️ Supabase chưa sẵn sàng, đang chờ...');
+                }
+            } else {
+                alert('Mã truy cập không hợp lệ!');
+            }
+        }
+
+        function logout() {
+            currentUser = null;
+            document.getElementById('loginScreen').classList.remove('hidden');
+            document.getElementById('mainApp').classList.add('hidden');
+            document.getElementById('accessCode').value = '';
+        }
+
+        // ==================== STUDENT MANAGEMENT ====================
+        async function loadStudents() {
+            if (!supabase) {
+                console.warn('Supabase not initialized');
+                return;
+            }
+
+            const { data, error } = await supabase
+                .from('students')
+                .select('*')
+                .order('updated_at', { ascending: false });
+
+            if (error) {
+                console.error('Error loading students:', error);
+                return;
+            }
+
+            allStudents = data || [];
+
+            // Load feedback gần nhất cho mỗi sinh viên
+            await loadLatestFeedbacks();
+
+            updateStats();
+            renderStudents();
+        }
+
+        // Load feedback gần nhất cho tất cả sinh viên
+        async function loadLatestFeedbacks() {
+            if (!supabase || allStudents.length === 0) return;
+
+            const { data, error } = await supabase
+                .from('feedbacks')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error('Error loading feedbacks:', error);
+                return;
+            }
+
+            // Gắn feedback gần nhất vào mỗi sinh viên
+            allStudents.forEach(student => {
+                const studentFeedbacks = data.filter(f => f.student_id === student.id);
+                student.latestFeedback = studentFeedbacks.length > 0 ? studentFeedbacks[0] : null;
+            });
+        }
+
+        function updateStats() {
+            const total = allStudents.length;
+            const green = allStudents.filter(s => (s.status || 'green') === 'green').length;
+            const yellow = allStudents.filter(s => s.status === 'yellow').length;
+            const red = allStudents.filter(s => s.status === 'red').length;
+
+            document.getElementById('totalStudents').textContent = total;
+            document.getElementById('greenCount').textContent = green;
+            document.getElementById('yellowCount').textContent = yellow;
+            document.getElementById('redCount').textContent = red;
+        }
+
+        function renderStudents() {
+            const container = document.getElementById('studentList');
+            let students = [...allStudents];
+
+            // Sắp xếp theo thời gian cập nhật mới nhất lên đầu
+            students.sort((a, b) => {
+                const timeA = new Date(a.updated_at || a.created_at);
+                const timeB = new Date(b.updated_at || b.created_at);
+                return timeB - timeA;
+            });
+
+            // Lọc theo trạng thái
+            if (currentFilter === 'attention') {
+                // Lọc sinh viên cần chăm sóc (vàng + đỏ)
+                students = students.filter(s => {
+                    const status = s.status || 'green';
+                    return status === 'yellow' || status === 'red';
+                });
+            } else if (currentFilter !== 'all') {
+                students = students.filter(s => (s.status || 'green') === currentFilter);
+            }
+
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            if (searchTerm) {
+                students = students.filter(s =>
+                    s.mssv.toLowerCase().includes(searchTerm) ||
+                    s.ho_ten.toLowerCase().includes(searchTerm)
+                );
+            }
+
+            // ===== PAGINATION LOGIC =====
+            const totalStudents = students.length;
+            const totalPages = Math.ceil(totalStudents / itemsPerPage);
+
+            // Đảm bảo currentPage hợp lệ
+            if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
+            if (currentPage < 1) currentPage = 1;
+
+            // Tính index
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = Math.min(startIndex + itemsPerPage, totalStudents);
+
+            // Lấy sinh viên của trang hiện tại
+            const studentsToShow = students.slice(startIndex, endIndex);
+
+            // Cập nhật pagination info
+            const paginationInfo = document.getElementById('paginationInfo');
+            if (paginationInfo) {
+                paginationInfo.textContent = totalStudents > 0
+                    ? `Hiển thị ${startIndex + 1}-${endIndex} trong ${totalStudents} sinh viên`
+                    : 'Không có sinh viên';
+            }
+
+            // Render pagination buttons
+            renderPaginationButtons(totalPages);
+
+            // ===== RENDER STUDENTS =====
+            if (studentsToShow.length === 0) {
+                container.innerHTML = '<div class="col-span-full text-center text-gray-500 py-12">Không tìm thấy sinh viên nào</div>';
+                return;
+            }
+
+            container.innerHTML = studentsToShow.map(student => {
+                const status = student.status || 'green';
+                const statusEmoji = { green: '🟢', yellow: '🟡', red: '🔴' }[status];
+                const statusText = { green: 'Ổn định', yellow: 'Theo dõi', red: 'Cảnh báo' }[status];
+                const statusClass = `status-${status}`;
+
+                // Tính thời gian cập nhật
+                const updateTime = student.updated_at || student.created_at;
+                const timeAgo = getTimeAgo(updateTime);
+                const isRecentlyUpdated = isRecent(updateTime);
+
+                // Feedback gần nhất
+                const latestFeedback = student.latestFeedback;
+                const feedbackPreview = latestFeedback ?
+                    (latestFeedback.content.length > 50 ?
+                        latestFeedback.content.substring(0, 50) + '...' :
+                        latestFeedback.content) :
+                    'Chưa có phản hồi';
+                const feedbackTime = latestFeedback ? getTimeAgo(latestFeedback.created_at) : '';
+
+                return `
+                    <div class="bg-white rounded-xl shadow-lg overflow-hidden card-hover ${isRecentlyUpdated ? 'ring-2 ring-blue-400' : ''}">
+                        <div class="${statusClass} h-2"></div>
+                        <div class="p-4">
+                            <div class="flex items-start justify-between mb-2">
+                                <div class="flex-1 cursor-pointer" onclick="openStudentDetail(${student.id})">
+                                    <h3 class="font-bold text-lg text-gray-800">${student.ho_ten}</h3>
+                                    <p class="text-sm text-gray-600">MSSV: ${student.mssv}</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button onclick="event.stopPropagation(); exportStudentReport(${student.id})" class="text-gray-400 hover:text-blue-600 transition" title="Xuất báo cáo">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                                        </svg>
+                                    </button>
+                                    <span class="text-2xl cursor-pointer" onclick="openStudentDetail(${student.id})">${statusEmoji}</span>
+                                </div>
+                            </div>
+                            <div class="text-xs text-gray-500 space-y-1 cursor-pointer" onclick="openStudentDetail(${student.id})">
+                                <p>📧 ${student.email || 'N/A'}</p>
+                                <p>🏫 ${student.lop || 'N/A'}</p>
+                            </div>
+                            
+                            ${latestFeedback ? `
+                                <div class="mt-3 pt-3 border-t border-gray-200 cursor-pointer" onclick="openStudentDetail(${student.id})">
+                                    <div class="flex items-start gap-2">
+                                        <span class="text-gray-400">💬</span>
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-xs text-gray-600 line-clamp-2">${feedbackPreview}</p>
+                                            <p class="text-xs text-gray-400 mt-1">⏱️ ${feedbackTime}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ` : ''}
+                            
+                            <div class="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between cursor-pointer" onclick="openStudentDetail(${student.id})">
+                                <span class="text-xs font-semibold px-2 py-1 rounded-full ${status === 'green' ? 'bg-green-100 text-green-700' :
+                        status === 'yellow' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-red-100 text-red-700'
+                    }">
+                                    ${statusText}
+                                </span>
+                                <span class="text-xs text-gray-500 flex items-center gap-1">
+                                    ${isRecentlyUpdated ? '<span class="text-blue-600 font-semibold">🆕</span>' : ''}
+                                    ⏱️ ${timeAgo}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function filterByStatus(status) {
+            currentFilter = status;
+            currentPage = 1; // Reset về trang 1 khi lọc
+            renderStudents();
+        }
+
+        function searchStudents() {
+            currentPage = 1; // Reset về trang 1 khi tìm kiếm
+            renderStudents();
+        }
+
+        // ===== PAGINATION FUNCTIONS =====
+        function renderPaginationButtons(totalPages) {
+            const container = document.getElementById('paginationButtons');
+            if (!container) return;
+
+            if (totalPages <= 1) {
+                container.innerHTML = '';
+                return;
+            }
+
+            let buttonsHTML = '';
+
+            // Previous button
+            buttonsHTML += `
+                <button onclick="changePage(${currentPage - 1})" 
+                    ${currentPage === 1 ? 'disabled' : ''}
+                    class="px-4 py-2 rounded-lg border ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-blue-50 text-gray-700 hover:border-blue-500'}">
+                    ◀ Trước
+                </button>
+            `;
+
+            // Page numbers (show max 7 buttons)
+            const maxButtons = 7;
+            let startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+            let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+
+            if (endPage - startPage < maxButtons - 1) {
+                startPage = Math.max(1, endPage - maxButtons + 1);
+            }
+
+            // First page + ellipsis
+            if (startPage > 1) {
+                buttonsHTML += `<button onclick="changePage(1)" class="px-3 py-2 rounded-lg border bg-white hover:bg-blue-50">1</button>`;
+                if (startPage > 2) {
+                    buttonsHTML += `<span class="px-2 text-gray-500">...</span>`;
+                }
+            }
+
+            // Page number buttons
+            for (let i = startPage; i <= endPage; i++) {
+                buttonsHTML += `
+                    <button onclick="changePage(${i})" 
+                        class="px-3 py-2 rounded-lg border ${i === currentPage ? 'bg-blue-600 text-white' : 'bg-white hover:bg-blue-50 text-gray-700'}">
+                        ${i}
+                    </button>
+                `;
+            }
+
+            // Ellipsis + last page
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    buttonsHTML += `<span class="px-2 text-gray-500">...</span>`;
+                }
+                buttonsHTML += `<button onclick="changePage(${totalPages})" class="px-3 py-2 rounded-lg border bg-white hover:bg-blue-50">${totalPages}</button>`;
+            }
+
+            // Next button
+            buttonsHTML += `
+                <button onclick="changePage(${currentPage + 1})" 
+                    ${currentPage === totalPages ? 'disabled' : ''}
+                    class="px-4 py-2 rounded-lg border ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-blue-50 text-gray-700 hover:border-blue-500'}">
+                    Sau ▶
+                </button>
+            `;
+
+            container.innerHTML = buttonsHTML;
+        }
+
+        function changePage(page) {
+            currentPage = page;
+            renderStudents();
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function changeItemsPerPage() {
+            const select = document.getElementById('itemsPerPage');
+            itemsPerPage = parseInt(select.value);
+            currentPage = 1; // Reset về trang 1
+            renderStudents();
+        }
+
+        // Hàm tính thời gian đã qua
+        function getTimeAgo(dateString) {
+            if (!dateString) return 'Chưa cập nhật';
+
+            const now = new Date();
+            const past = new Date(dateString);
+            const diffMs = now - past;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
+
+            if (diffMins < 1) return 'Vừa xong';
+            if (diffMins < 60) return `${diffMins} phút trước`;
+            if (diffHours < 24) return `${diffHours} giờ trước`;
+            if (diffDays < 7) return `${diffDays} ngày trước`;
+            return past.toLocaleDateString('vi-VN');
+        }
+
+        // Kiểm tra có phải cập nhật gần đây không (trong 30 phút)
+        function isRecent(dateString) {
+            if (!dateString) return false;
+            const now = new Date();
+            const past = new Date(dateString);
+            const diffMs = now - past;
+            const diffMins = Math.floor(diffMs / 60000);
+            return diffMins <= 30;
+        }
+
+        // ==================== MODAL ====================
+        async function openStudentDetail(studentId) {
+            currentStudentId = studentId;
+            const student = allStudents.find(s => s.id === studentId);
+
+            if (!student) return;
+
+            document.getElementById('modalStudentName').textContent = student.ho_ten;
+            document.getElementById('modalStudentInfo').textContent = `${student.mssv} • ${student.lop || 'N/A'}`;
+
+            // Cho phép cả GV và CTSV thay đổi trạng thái
+            if (currentUser.role === 'Giảng viên' || currentUser.role === 'CTSV') {
+                document.getElementById('statusSelector').classList.remove('hidden');
+            } else {
+                document.getElementById('statusSelector').classList.add('hidden');
+            }
+
+            await loadFeedbacks(studentId);
+            document.getElementById('studentModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('studentModal').classList.remove('active');
+            currentStudentId = null;
+            document.getElementById('feedbackInput').value = '';
+        }
+
+        // ==================== EXPORT REPORT ====================
+        function openExportModal() {
+            document.getElementById('exportModal').classList.add('active');
+        }
+
+        function closeExportModal() {
+            document.getElementById('exportModal').classList.remove('active');
+        }
+
+        async function exportReport(type) {
+            closeExportModal();
+
+            const timestamp = new Date().toLocaleString('vi-VN');
+            let htmlContent = '';
+
+            if (type === 'overview') {
+                htmlContent = generateOverviewReport(timestamp);
+            } else if (type === 'by-class') {
+                htmlContent = generateByClassReport(timestamp);
+            } else if (type === 'detailed') {
+                htmlContent = await generateDetailedReport(timestamp);
+            }
+
+            // Mở cửa sổ mới và in
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(htmlContent);
+            printWindow.document.close();
+            printWindow.focus();
+
+            // Tự động mở hộp thoại in sau 500ms
+            setTimeout(() => {
+                printWindow.print();
+            }, 500);
+        }
+
+        function getReportStyles() {
+            return `
+                <style>
+                    @media print {
+                        @page { margin: 2cm; }
+                        body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+                    }
+                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                    body { font-family: 'Inter', Arial, sans-serif; padding: 40px; background: #f5f5f5; }
+                    .report-container { max-width: 1200px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                    h1 { color: #1e40af; font-size: 28px; margin-bottom: 20px; border-bottom: 3px solid #3b82f6; padding-bottom: 10px; }
+                    .meta-info { color: #666; margin-bottom: 30px; font-size: 14px; }
+                    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+                    th { background: #f3f4f6; font-weight: 600; color: #374151; }
+                    tr:hover { background: #f9fafb; }
+                    .status-green { color: #059669; font-weight: 600; }
+                    .status-yellow { color: #d97706; font-weight: 600; }
+                    .status-red { color: #dc2626; font-weight: 600; }
+                    .summary-card { background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6; }
+                    .print-button { background: #3b82f6; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; margin-bottom: 20px; }
+                    .print-button:hover { background: #2563eb; }
+                    @media print { .print-button { display: none; } }
+                    .feedback-item { background: #f9fafb; padding: 10px; margin: 5px 0; border-radius: 4px; font-size: 13px; }
+                    .feedback-meta { color: #6b7280; font-size: 12px; margin-top: 5px; }
+                </style>
+            `;
+        }
+
+        function generateOverviewReport(timestamp) {
+            const total = allStudents.length;
+            const green = allStudents.filter(s => (s.status || 'green') === 'green').length;
+            const yellow = allStudents.filter(s => s.status === 'yellow').length;
+            const red = allStudents.filter(s => s.status === 'red').length;
+
+            return `
+                <!DOCTYPE html>
+                <html lang="vi">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Báo cáo tổng quan - SRMH</title>
+                    ${getReportStyles()}
+                </head>
+                <body>
+                    <div class="report-container">
+                        <button class="print-button" onclick="window.print()">🖨️ In báo cáo</button>
+                        <h1>📊 BÁO CÁO TỔNG QUAN TRẠNG THÁI SINH VIÊN</h1>
+                        <div class="meta-info">
+                            <p><strong>Ngày xuất:</strong> ${timestamp}</p>
+                            <p><strong>Người xuất:</strong> ${currentUser.role}</p>
+                            <p><strong>Tổng số sinh viên:</strong> ${total}</p>
+                        </div>
+                        
+                        <div class="summary-card">
+                            <h3 style="margin-bottom: 15px;">Thống kê trạng thái</h3>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Trạng thái</th>
+                                        <th>Số lượng</th>
+                                        <th>Tỷ lệ %</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="status-green">🟢 Ổn định</td>
+                                        <td>${green}</td>
+                                        <td>${((green / total) * 100).toFixed(1)}%</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="status-yellow">🟡 Theo dõi</td>
+                                        <td>${yellow}</td>
+                                        <td>${((yellow / total) * 100).toFixed(1)}%</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="status-red">🔴 Cảnh báo</td>
+                                        <td>${red}</td>
+                                        <td>${((red / total) * 100).toFixed(1)}%</td>
+                                    </tr>
+                                    <tr style="font-weight: bold; background: #f3f4f6;">
+                                        <td>Tổng cộng</td>
+                                        <td>${total}</td>
+                                        <td>100%</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `;
+        }
+
+        function generateByClassReport(timestamp) {
+            const classSummary = {};
+
+            allStudents.forEach(student => {
+                const className = student.lop || 'Chưa phân lớp';
+                if (!classSummary[className]) {
+                    classSummary[className] = { total: 0, green: 0, yellow: 0, red: 0 };
+                }
+                classSummary[className].total++;
+                const status = student.status || 'green';
+                classSummary[className][status]++;
+            });
+
+            const classRows = Object.keys(classSummary).sort().map(className => {
+                const stats = classSummary[className];
+                return `
+                    <tr>
+                        <td><strong>${className}</strong></td>
+                        <td>${stats.total}</td>
+                        <td class="status-green">${stats.green || 0}</td>
+                        <td class="status-yellow">${stats.yellow || 0}</td>
+                        <td class="status-red">${stats.red || 0}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            return `
+                <!DOCTYPE html>
+                <html lang="vi">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Báo cáo theo lớp - SRMH</title>
+                    ${getReportStyles()}
+                </head>
+                <body>
+                    <div class="report-container">
+                        <button class="print-button" onclick="window.print()">🖨️ In báo cáo</button>
+                        <h1>🏫 BÁO CÁO THEO LỚP</h1>
+                        <div class="meta-info">
+                            <p><strong>Ngày xuất:</strong> ${timestamp}</p>
+                            <p><strong>Người xuất:</strong> ${currentUser.role}</p>
+                        </div>
+                        
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Lớp</th>
+                                    <th>Tổng SV</th>
+                                    <th>Ổn định</th>
+                                    <th>Theo dõi</th>
+                                    <th>Cảnh báo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${classRows}
+                            </tbody>
+                        </table>
+                    </div>
+                </body>
+                </html>
+            `;
+        }
+
+        async function generateDetailedReport(timestamp) {
+            const { data: allFeedbacks, error } = await supabase
+                .from('feedbacks')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error('Error loading feedbacks:', error);
+            }
+
+            const studentRows = allStudents.map(student => {
+                const status = student.status || 'green';
+                const statusText = { green: 'Ổn định', yellow: 'Theo dõi', red: 'Cảnh báo' }[status];
+                const statusClass = `status-${status}`;
+
+                const studentFeedbacks = allFeedbacks ? allFeedbacks.filter(f => f.student_id === student.id) : [];
+                const latestFeedback = studentFeedbacks.length > 0 ? studentFeedbacks[0] : null;
+
+                return `
+                    <tr>
+                        <td>${student.mssv}</td>
+                        <td><strong>${student.ho_ten}</strong></td>
+                        <td>${student.lop || 'N/A'}</td>
+                        <td>${student.email || 'N/A'}</td>
+                        <td class="${statusClass}">${statusText}</td>
+                        <td>${latestFeedback ? latestFeedback.content : 'Chưa có feedback'}</td>
+                        <td>${latestFeedback ? new Date(latestFeedback.created_at).toLocaleString('vi-VN') : ''}</td>
+                        <td>${latestFeedback ? (latestFeedback.role === 'GV' ? 'Giảng viên' : 'CTSV') : ''}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            return `
+                <!DOCTYPE html>
+                <html lang="vi">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Báo cáo chi tiết - SRMH</title>
+                    ${getReportStyles()}
+                </head>
+                <body>
+                    <div class="report-container">
+                        <button class="print-button" onclick="window.print()">🖨️ In báo cáo</button>
+                        <h1>📝 BÁO CÁO CHI TIẾT SINH VIÊN</h1>
+                        <div class="meta-info">
+                            <p><strong>Ngày xuất:</strong> ${timestamp}</p>
+                            <p><strong>Người xuất:</strong> ${currentUser.role}</p>
+                            <p><strong>Tổng số sinh viên:</strong> ${allStudents.length}</p>
+                        </div>
+                        
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>MSSV</th>
+                                    <th>Họ tên</th>
+                                    <th>Lớp</th>
+                                    <th>Email</th>
+                                    <th>Trạng thái</th>
+                                    <th>Feedback gần nhất</th>
+                                    <th>Thời gian</th>
+                                    <th>Người feedback</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${studentRows}
+                            </tbody>
+                        </table>
+                    </div>
+                </body>
+                </html>
+            `;
+        }
+
+        async function exportStudentReport(studentId) {
+            const student = allStudents.find(s => s.id === studentId);
+            if (!student) return;
+
+            // Load tất cả feedbacks của sinh viên
+            const { data: feedbacks, error } = await supabase
+                .from('feedbacks')
+                .select('*')
+                .eq('student_id', studentId)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error('Error loading feedbacks:', error);
+            }
+
+            const status = student.status || 'green';
+            const statusText = { green: 'Ổn định', yellow: 'Theo dõi', red: 'Cảnh báo' }[status];
+            const statusClass = `status-${status}`;
+            const timestamp = new Date().toLocaleString('vi-VN');
+
+            const feedbackItems = feedbacks && feedbacks.length > 0 ? feedbacks.map(fb => {
+                const roleText = fb.role === 'GV' ? '👨‍🏫 Giảng viên' : '👤 CTSV';
+                const time = new Date(fb.created_at).toLocaleString('vi-VN');
+                return `
+                    <div class="feedback-item">
+                        <p><strong>${fb.content}</strong></p>
+                        <p class="feedback-meta">${roleText} • ${time}</p>
+                    </div>
+                `;
+            }).join('') : '<p style="color: #9ca3af;">Chưa có feedback nào</p>';
+
+            const htmlContent = `
+                <!DOCTYPE html>
+                <html lang="vi">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Báo cáo sinh viên - ${student.ho_ten}</title>
+                    ${getReportStyles()}
+                </head>
+                <body>
+                    <div class="report-container">
+                        <button class="print-button" onclick="window.print()">🖨️ In báo cáo</button>
+                        <h1>👤 BÁO CÁO SINH VIÊN</h1>
+                        <div class="meta-info">
+                            <p><strong>Ngày xuất:</strong> ${timestamp}</p>
+                            <p><strong>Người xuất:</strong> ${currentUser.role}</p>
+                        </div>
+                        
+                        <div class="summary-card">
+                            <h2 style="margin-bottom: 15px; color: #1e40af;">${student.ho_ten}</h2>
+                            <table>
+                                <tr>
+                                    <th style="width: 200px;">MSSV</th>
+                                    <td>${student.mssv}</td>
+                                </tr>
+                                <tr>
+                                    <th>Lớp</th>
+                                    <td>${student.lop || 'N/A'}</td>
+                                </tr>
+                                <tr>
+                                    <th>Email</th>
+                                    <td>${student.email || 'N/A'}</td>
+                                </tr>
+                                <tr>
+                                    <th>Trạng thái</th>
+                                    <td class="${statusClass}">${statusText}</td>
+                                </tr>
+                                <tr>
+                                    <th>Cập nhật lần cuối</th>
+                                    <td>${new Date(student.updated_at || student.created_at).toLocaleString('vi-VN')}</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <h3 style="margin-top: 30px; margin-bottom: 15px; color: #374151;">📝 Lịch sử feedback</h3>
+                        ${feedbackItems}
+                    </div>
+                </body>
+                </html>
+            `;
+
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(htmlContent);
+            printWindow.document.close();
+            printWindow.focus();
+
+            setTimeout(() => {
+                printWindow.print();
+            }, 500);
+        }
+
+
+
+        // Close export modal when clicking outside
+        document.getElementById('exportModal').addEventListener('click', (e) => {
+            if (e.target.id === 'exportModal') {
+                closeExportModal();
+            }
+        });
+
+        async function loadFeedbacks(studentId) {
+            if (!supabase) return;
+
+            const { data, error } = await supabase
+                .from('feedbacks')
+                .select('*')
+                .eq('student_id', studentId)
+                .order('created_at', { ascending: true });
+
+            if (error) {
+                console.error('Error loading feedbacks:', error);
+                return;
+            }
+
+            const timeline = document.getElementById('feedbackTimeline');
+
+            if (!data || data.length === 0) {
+                timeline.innerHTML = '<p class="text-gray-500 text-center">Chưa có phản hồi nào</p>';
+                return;
+            }
+
+            timeline.innerHTML = data.map(feedback => {
+                const isGV = feedback.role === 'GV';
+                const bgColor = isGV ? 'bg-blue-100' : 'bg-green-100';
+                const textColor = isGV ? 'text-blue-800' : 'text-green-800';
+                const roleIcon = isGV ? '👨‍🏫' : '👤';
+                const roleText = isGV ? 'Giảng viên' : 'CTSV';
+                const time = new Date(feedback.created_at).toLocaleString('vi-VN');
+
+                return `
+                    <div class="timeline-item mb-4">
+                        <div class="${bgColor} rounded-lg p-4">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold ${textColor}">
+                                    ${roleIcon} ${roleText}
+                                </span>
+                                <span class="text-xs text-gray-500">${time}</span>
+                            </div>
+                            <p class="text-gray-800">${feedback.content}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            timeline.scrollTop = timeline.scrollHeight;
+        }
+
+        async function sendFeedback() {
+            if (!supabase) return;
+
+            const content = document.getElementById('feedbackInput').value.trim();
+            if (!content || !currentStudentId) return;
+
+            const role = currentUser.role === 'Giảng viên' ? 'GV' : 'CTSV';
+
+            // Insert feedback
+            const { error } = await supabase
+                .from('feedbacks')
+                .insert({
+                    student_id: currentStudentId,
+                    role: role,
+                    content: content
+                });
+
+            if (error) {
+                console.error('Error sending feedback:', error);
+                alert('Lỗi gửi phản hồi: ' + error.message);
+                return;
+            }
+
+            // Cập nhật updated_at của sinh viên để đưa lên đầu danh sách
+            const { error: updateError } = await supabase
+                .from('students')
+                .update({ updated_at: new Date().toISOString() })
+                .eq('id', currentStudentId);
+
+            if (updateError) {
+                console.error('Error updating student timestamp:', updateError);
+            }
+
+            document.getElementById('feedbackInput').value = '';
+            await loadFeedbacks(currentStudentId);
+            await loadStudents(); // Reload để cập nhật thời gian trên card
+        }
+
+        async function updateStudentStatus(status) {
+            if (!supabase || !currentStudentId) return;
+
+            const { error } = await supabase
+                .from('students')
+                .update({
+                    status: status,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', currentStudentId);
+
+            if (error) {
+                console.error('Error updating status:', error);
+                alert('Lỗi cập nhật trạng thái: ' + error.message);
+                return;
+            }
+
+            await loadStudents();
+
+            // Xác định role dựa trên người dùng hiện tại
+            const role = currentUser.role === 'Giảng viên' ? 'GV' : 'CTSV';
+            const statusText = { green: 'Ổn định 🟢', yellow: 'Theo dõi 🟡', red: 'Cảnh báo 🔴' }[status];
+
+            await supabase.from('feedbacks').insert({
+                student_id: currentStudentId,
+                role: role,
+                content: `Trạng thái đã được cập nhật thành: ${statusText}`
+            });
+        }
+
+        function setupRealtimeSubscription() {
+            if (!supabase) return;
+
+            supabase
+                .channel('students-changes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => loadStudents())
+                .subscribe();
+
+            supabase
+                .channel('feedbacks-changes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'feedbacks' }, (payload) => {
+                    if (currentStudentId && payload.new && payload.new.student_id === currentStudentId) {
+                        loadFeedbacks(currentStudentId);
+                    }
+                })
+                .subscribe();
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('studentModal').addEventListener('click', (e) => {
+            if (e.target.id === 'studentModal') {
+                closeModal();
+            }
+        });
+
+        console.log('=== Core Ready ===');
+    </script>
+
+    <!-- Load Supabase và XLSX với UMD build -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
+    <!-- Excel Library Removed -->
+
+    <script>
+        // Initialize Supabase sau khi library load xong
+        (function initSupabase() {
+            console.log('🔄 Initializing Supabase...');
+            console.log('📍 URL:', SUPABASE_URL);
+            console.log('🔑 Key (first 30 chars):', SUPABASE_KEY.substring(0, 30) + '...');
+
+            try {
+                // Kiểm tra xem Supabase library đã load chưa
+                if (typeof window.supabase === 'undefined') {
+                    console.error('❌ Supabase library not found on window object');
+                    console.log('Available on window:', Object.keys(window).filter(k => k.toLowerCase().includes('supabase')));
+                    alert('⚠️ Lỗi: Thư viện Supabase chưa được tải. Vui lòng refresh trang.');
+                    return;
+                }
+
+                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                console.log('✅ Supabase initialized');
+                console.log('🔍 Supabase client:', supabase);
+
+                // Test connection
+                testSupabaseConnection();
+
+                // Nếu đã đăng nhập rồi, load students
+                if (currentUser) {
+                    loadStudents();
+                    setupRealtimeSubscription();
+                }
+            } catch (error) {
+                console.error('❌ Error initializing Supabase:', error);
+                alert('⚠️ Lỗi kết nối Supabase: ' + error.message + '\n\nVui lòng kiểm tra API key trong code.');
+            }
+        })();
+
+        async function testSupabaseConnection() {
+            console.log('🔄 Testing Supabase connection...');
+            try {
+                const { data, error } = await supabase
+                    .from('students')
+                    .select('count', { count: 'exact', head: true });
+
+                if (error) {
+                    console.error('❌ Supabase connection test failed:', error);
+                    console.error('Error details:', {
+                        message: error.message,
+                        details: error.details,
+                        hint: error.hint,
+                        code: error.code
+                    });
+
+                    // Show user-friendly error
+                    const statusDiv = document.getElementById('importStatus');
+                    if (statusDiv) {
+                        statusDiv.innerHTML = `
+                            <div class="text-sm text-red-600 font-medium p-3 bg-red-50 rounded-lg">
+                                ❌ Lỗi kết nối database: ${error.message}<br>
+                                <small>Vui lòng kiểm tra API key hoặc liên hệ admin</small>
+                            </div>
+                        `;
+                    }
+                } else {
+                    console.log('✅ Supabase connection successful!');
+                }
+            } catch (error) {
+                console.error('❌ Exception during connection test:', error);
+            }
+        }
+
+        function handleSupabaseError() {
+            console.error('❌ Failed to load Supabase library');
+            console.warn('⚠️ Hệ thống sẽ hoạt động ở chế độ offline (không có database)');
+        }
+
+        // Excel import functionality removed
+
+    </script>
+</body>
+
+</html>
