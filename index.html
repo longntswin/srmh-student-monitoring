@@ -396,12 +396,8 @@
                 document.getElementById('mainApp').classList.remove('hidden');
                 document.getElementById('userRole').textContent = currentUser.role;
 
-                if (currentUser.role === 'Admin') {
-                    document.getElementById('adminSection').classList.remove('hidden');
-                } else {
-                    // Hiển thị nút xuất báo cáo cho GV và CTSV
-                    document.getElementById('exportButton').classList.remove('hidden');
-                }
+                // Hiển thị nút xuất báo cáo cho tất cả các role (Admin, GV, CTSV)
+                document.getElementById('exportButton').classList.remove('hidden');
 
                 // Load students nếu Supabase đã sẵn sàng
                 if (supabase) {
