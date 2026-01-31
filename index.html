@@ -582,7 +582,7 @@
                                 </div>
                             </div>
                             <div class="text-xs text-gray-500 space-y-1 cursor-pointer" onclick="openStudentDetail(${student.id})">
-                                <p>📧 ${student.email || 'N/A'}</p>
+                                <p>� ${student.subject || 'N/A'}</p>
                                 <p>🏫 ${student.lop || 'N/A'}</p>
                             </div>
                             
@@ -978,7 +978,7 @@
                         <td>${student.mssv}</td>
                         <td><strong>${student.ho_ten}</strong></td>
                         <td>${student.lop || 'N/A'}</td>
-                        <td>${student.email || 'N/A'}</td>
+                        <td>${student.subject || 'N/A'}</td>
                         <td class="${statusClass}">${statusText}</td>
                         <td>${latestFeedback ? latestFeedback.content : 'Chưa có feedback'}</td>
                         <td>${latestFeedback ? new Date(latestFeedback.created_at).toLocaleString('vi-VN') : ''}</td>
@@ -1011,7 +1011,7 @@
                                     <th>MSSV</th>
                                     <th>Họ tên</th>
                                     <th>Lớp</th>
-                                    <th>Email</th>
+                                    <th>Môn học</th>
                                     <th>Trạng thái</th>
                                     <th>Feedback gần nhất</th>
                                     <th>Thời gian</th>
@@ -1088,8 +1088,8 @@
                                     <td>${student.lop || 'N/A'}</td>
                                 </tr>
                                 <tr>
-                                    <th>Email</th>
-                                    <td>${student.email || 'N/A'}</td>
+                                    <th>Môn học</th>
+                                    <td>${student.subject || 'N/A'}</td>
                                 </tr>
                                 <tr>
                                     <th>Trạng thái</th>
@@ -1351,6 +1351,37 @@
         // Excel import functionality removed
 
     </script>
+
+    <!-- Footer - Author Info -->
+    <footer class="bg-gradient-to-r from-slate-800 to-slate-900 text-white py-6 mt-12">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                <div class="text-center md:text-left">
+                    <p class="text-sm text-slate-300 mb-1">
+                        Developed by <span class="font-semibold text-white">Nguyễn Thành Long</span>
+                    </p>
+                    <p class="text-xs text-slate-400">
+                        🏢 FPI Đà Nẵng
+                    </p>
+                </div>
+                <div class="flex items-center gap-4">
+                    <a href="mailto:longntswin@gmail.com"
+                        class="flex items-center gap-2 text-sm text-slate-300 hover:text-white transition group">
+                        <svg class="w-5 h-5 group-hover:scale-110 transition" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"></path>
+                            <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"></path>
+                        </svg>
+                        <span>longntswin@gmail.com</span>
+                    </a>
+                </div>
+            </div>
+            <div class="mt-4 pt-4 border-t border-slate-700 text-center">
+                <p class="text-xs text-slate-400">
+                    © 2026 SRMH - Student Real-time Monitoring Hub | All rights reserved
+                </p>
+            </div>
+        </div>
+    </footer>
 </body>
 
 </html>
