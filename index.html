@@ -346,10 +346,10 @@
                 <button onclick="exportReport('detailed')"
                     class="w-full px-6 py-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:shadow-lg transition transform hover:scale-105 text-left">
                     <div class="flex items-center gap-3">
-                        <span class="text-2xl">📝</span>
+                        <span class="text-2xl">⚠️</span>
                         <div>
-                            <div class="font-semibold">Báo cáo chi tiết</div>
-                            <div class="text-xs text-orange-100">Danh sách sinh viên và feedback</div>
+                            <div class="font-semibold">Báo cáo chăm sóc SV</div>
+                            <div class="text-xs text-orange-100">Sinh viên cần theo dõi (Vàng & Đỏ)</div>
                         </div>
                     </div>
                 </button>
@@ -787,16 +787,13 @@
                 htmlContent = await generateDetailedReport(timestamp);
             }
 
-            // Mở cửa sổ mới và in
+            // Mở cửa sổ mới để xem và in báo cáo
             const printWindow = window.open('', '_blank');
             printWindow.document.write(htmlContent);
             printWindow.document.close();
             printWindow.focus();
 
-            // Tự động mở hộp thoại in sau 500ms
-            setTimeout(() => {
-                printWindow.print();
-            }, 500);
+            // User có thể tự in bằng Cmd+P hoặc Ctrl+P
         }
 
         function getReportStyles() {
@@ -895,16 +892,46 @@
         function generateByClassReport(timestamp) {
             const classSummary = {};
 
+            // Tách sinh viên theo từng lớp
             allStudents.forEach(student => {
-                const className = student.lop || 'Chưa phân lớp';
-                if (!classSummary[className]) {
-                    classSummary[className] = { total: 0, green: 0, yellow: 0, red: 0 };
+                // Lấy danh sách lớp (có thể nhiều lớp cách nhau bằng dấu phẩy)
+                const classString = student.lop || 'Chưa phân lớp';
+
+                // Tách thành mảng các lớp (trim để bỏ khoảng trắng thừa)
+                const classes = classString.split(',')
+                    .map(c => {
+                        // Loại bỏ các ký tự đặc biệt: {, }, [, ], (, )
+                        return c.trim()
+                            .replace(/[\{\}\[\]\(\)]/g, '')
+                            .trim();
+                    })
+                    .filter(c => c); // Bỏ các chuỗi rỗng
+
+                // Nếu không có lớp nào, gán vào "Chưa phân lớp"
+                if (classes.length === 0) {
+                    classes.push('Chưa phân lớp');
                 }
-                classSummary[className].total++;
-                const status = student.status || 'green';
-                classSummary[className][status]++;
+
+                // Tính sinh viên vào từng lớp
+                classes.forEach(className => {
+                    if (!classSummary[className]) {
+                        classSummary[className] = {
+                            total: 0,
+                            green: 0,
+                            yellow: 0,
+                            red: 0,
+                            students: [] // Lưu danh sách sinh viên để kiểm tra
+                        };
+                    }
+
+                    classSummary[className].total++;
+                    const status = student.status || 'green';
+                    classSummary[className][status]++;
+                    classSummary[className].students.push(student.ho_ten); // Debug
+                });
             });
 
+            // Sắp xếp lớp theo tên (BA08201, IT17301, MKT17302...)
             const classRows = Object.keys(classSummary).sort().map(className => {
                 const stats = classSummary[className];
                 return `
@@ -917,6 +944,11 @@
                     </tr>
                 `;
             }).join('');
+
+            // Tính tổng số lớp và tổng sinh viên (có thể trùng)
+            const totalClasses = Object.keys(classSummary).length;
+            const totalEnrollments = Object.values(classSummary).reduce((sum, stats) => sum + stats.total, 0);
+            const uniqueStudents = allStudents.length;
 
             return `
                 <!DOCTYPE html>
@@ -933,6 +965,12 @@
                         <div class="meta-info">
                             <p><strong>Ngày xuất:</strong> ${timestamp}</p>
                             <p><strong>Người xuất:</strong> ${currentUser.role}</p>
+                            <p><strong>Tổng số lớp:</strong> ${totalClasses} lớp</p>
+                            <p><strong>Tổng lượt đăng ký:</strong> ${totalEnrollments} lượt</p>
+                            <p><strong>Số sinh viên duy nhất:</strong> ${uniqueStudents} sinh viên</p>
+                            <p style="color: #6b7280; font-size: 0.875rem; margin-top: 8px;">
+                                ℹ️ Lưu ý: Một sinh viên học nhiều lớp sẽ được tính vào từng lớp riêng biệt
+                            </p>
                         </div>
                         
                         <table>
@@ -956,6 +994,7 @@
         }
 
         async function generateDetailedReport(timestamp) {
+            // Load tất cả feedbacks
             const { data: allFeedbacks, error } = await supabase
                 .from('feedbacks')
                 .select('*')
@@ -965,63 +1004,112 @@
                 console.error('Error loading feedbacks:', error);
             }
 
-            const studentRows = allStudents.map(student => {
+            // Lọc chỉ sinh viên có trạng thái vàng hoặc đỏ
+            const studentsNeedCare = allStudents.filter(student => {
                 const status = student.status || 'green';
-                const statusText = { green: 'Ổn định', yellow: 'Theo dõi', red: 'Cảnh báo' }[status];
+                return status === 'yellow' || status === 'red';
+            });
+
+            // Sắp xếp: Đỏ lên đầu, sau đó vàng
+            studentsNeedCare.sort((a, b) => {
+                const statusOrder = { red: 0, yellow: 1 };
+                return statusOrder[a.status || 'yellow'] - statusOrder[b.status || 'yellow'];
+            });
+
+            const studentRows = studentsNeedCare.map(student => {
+                const status = student.status || 'yellow';
+                const statusText = { yellow: 'Theo dõi', red: 'Cảnh báo' }[status];
                 const statusClass = `status-${status}`;
 
-                const studentFeedbacks = allFeedbacks ? allFeedbacks.filter(f => f.student_id === student.id) : [];
-                const latestFeedback = studentFeedbacks.length > 0 ? studentFeedbacks[0] : null;
+                // Lấy 2 feedback gần nhất
+                const studentFeedbacks = allFeedbacks ?
+                    allFeedbacks.filter(f => f.student_id === student.id).slice(0, 2) : [];
+
+                // Gộp 2 feedback thành 1 chuỗi
+                let feedbackContent = '';
+                if (studentFeedbacks.length === 0) {
+                    feedbackContent = '<em style="color: #9ca3af;">Chưa có feedback</em>';
+                } else {
+                    feedbackContent = studentFeedbacks.map((fb, index) => {
+                        const fbDate = new Date(fb.created_at).toLocaleString('vi-VN', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                        const fbRole = fb.role === 'GV' ? 'GV' : 'CTSV';
+                        return `
+                            <div style="margin-bottom: ${index === 0 && studentFeedbacks.length > 1 ? '12px' : '0'}; padding-bottom: ${index === 0 && studentFeedbacks.length > 1 ? '12px' : '0'}; border-bottom: ${index === 0 && studentFeedbacks.length > 1 ? '1px solid #e5e7eb' : 'none'};">
+                                <div style="font-weight: 600; color: #374151; margin-bottom: 4px;">
+                                    ${index + 1}. ${fb.content}
+                                </div>
+                                <div style="font-size: 0.75rem; color: #6b7280;">
+                                    📅 ${fbDate} | 👤 ${fbRole}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
 
                 return `
                     <tr>
-                        <td>${student.mssv}</td>
+                        <td style="text-align: center;">${student.mssv}</td>
                         <td><strong>${student.ho_ten}</strong></td>
-                        <td>${student.lop || 'N/A'}</td>
-                        <td>${student.subject || 'N/A'}</td>
-                        <td class="${statusClass}">${statusText}</td>
-                        <td>${latestFeedback ? latestFeedback.content : 'Chưa có feedback'}</td>
-                        <td>${latestFeedback ? new Date(latestFeedback.created_at).toLocaleString('vi-VN') : ''}</td>
-                        <td>${latestFeedback ? (latestFeedback.role === 'GV' ? 'Giảng viên' : 'CTSV') : ''}</td>
+                        <td style="text-align: center;" class="${statusClass}"><strong>${statusText}</strong></td>
+                        <td style="max-width: 500px;">${feedbackContent}</td>
                     </tr>
                 `;
             }).join('');
+
+            const totalYellow = studentsNeedCare.filter(s => s.status === 'yellow').length;
+            const totalRed = studentsNeedCare.filter(s => s.status === 'red').length;
 
             return `
                 <!DOCTYPE html>
                 <html lang="vi">
                 <head>
                     <meta charset="UTF-8">
-                    <title>Báo cáo chi tiết - SRMH</title>
+                    <title>Báo cáo chăm sóc SV - SRMH</title>
                     ${getReportStyles()}
+                    <style>
+                        table td { vertical-align: top; }
+                    </style>
                 </head>
                 <body>
                     <div class="report-container">
                         <button class="print-button" onclick="window.print()">🖨️ In báo cáo</button>
-                        <h1>📝 BÁO CÁO CHI TIẾT SINH VIÊN</h1>
+                        <h1>⚠️ BÁO CÁO CHĂM SÓC SINH VIÊN</h1>
                         <div class="meta-info">
                             <p><strong>Ngày xuất:</strong> ${timestamp}</p>
                             <p><strong>Người xuất:</strong> ${currentUser.role}</p>
-                            <p><strong>Tổng số sinh viên:</strong> ${allStudents.length}</p>
+                            <p><strong>Tổng SV cần chăm sóc:</strong> ${studentsNeedCare.length} sinh viên</p>
+                            <p style="margin-left: 20px;">🟡 Theo dõi: ${totalYellow} | 🔴 Cảnh báo: ${totalRed}</p>
+                            <p style="color: #6b7280; font-size: 0.875rem; margin-top: 8px;">
+                                ℹ️ Danh sách chỉ bao gồm sinh viên có trạng thái <strong>Theo dõi</strong> và <strong>Cảnh báo</strong>
+                            </p>
                         </div>
                         
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>MSSV</th>
-                                    <th>Họ tên</th>
-                                    <th>Lớp</th>
-                                    <th>Môn học</th>
-                                    <th>Trạng thái</th>
-                                    <th>Feedback gần nhất</th>
-                                    <th>Thời gian</th>
-                                    <th>Người feedback</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${studentRows}
-                            </tbody>
-                        </table>
+                        ${studentsNeedCare.length === 0 ? `
+                            <div style="text-align: center; padding: 40px; background: #f0fdf4; border-radius: 8px; color: #16a34a;">
+                                <h2 style="font-size: 1.5rem; margin-bottom: 8px;">🎉 Tuyệt vời!</h2>
+                                <p>Hiện tại không có sinh viên nào cần chăm sóc đặc biệt.</p>
+                            </div>
+                        ` : `
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width: 100px;">MSSV</th>
+                                        <th style="width: 200px;">Họ tên</th>
+                                        <th style="width: 120px;">Trạng thái</th>
+                                        <th>Feedback (2 lần gần nhất)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${studentRows}
+                                </tbody>
+                            </table>
+                        `}
                     </div>
                 </body>
                 </html>
@@ -1114,9 +1202,7 @@
             printWindow.document.close();
             printWindow.focus();
 
-            setTimeout(() => {
-                printWindow.print();
-            }, 500);
+            // User có thể tự in bằng Cmd+P hoặc Ctrl+P
         }
 
 
