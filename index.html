@@ -87,6 +87,69 @@
                 opacity: .5;
             }
         }
+
+        /* Reaction Button Styles */
+        .reaction-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+            background: transparent;
+        }
+
+        .reaction-btn:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        .reaction-btn.reacted {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: rgba(239, 68, 68, 0.4);
+        }
+
+        .reaction-btn .heart-icon {
+            transition: transform 0.2s ease;
+        }
+
+        .reaction-btn:hover .heart-icon {
+            transform: scale(1.2);
+        }
+
+        .reaction-btn.reacted .heart-icon {
+            animation: heartBeat 0.3s ease;
+        }
+
+        @keyframes heartBeat {
+            0% {
+                transform: scale(1);
+            }
+
+            25% {
+                transform: scale(1.3);
+            }
+
+            50% {
+                transform: scale(1.1);
+            }
+
+            75% {
+                transform: scale(1.25);
+            }
+
+            100% {
+                transform: scale(1.2);
+            }
+        }
+
+        .reaction-count {
+            font-weight: 600;
+            color: #ef4444;
+        }
     </style>
 </head>
 
@@ -1239,6 +1302,20 @@
                 const roleText = isGV ? 'Giảng viên' : 'CTSV';
                 const time = new Date(feedback.created_at).toLocaleString('vi-VN');
 
+                // Xử lý reactions
+                const reactions = feedback.reactions || [];
+                const reactionCount = reactions.length;
+                const currentUserRole = currentUser.role === 'Giảng viên' ? 'GV' : 'CTSV';
+                const hasReacted = reactions.some(r => r.role === currentUserRole);
+
+                // Chỉ hiển thị nút reaction nếu feedback không phải của chính mình
+                const canReact = feedback.role !== currentUserRole;
+
+                // Tạo tooltip hiển thị ai đã react
+                const reactionTooltip = reactions.length > 0
+                    ? reactions.map(r => r.role === 'GV' ? 'Giảng viên' : 'CTSV').join(', ')
+                    : '';
+
                 return `
                     <div class="timeline-item mb-4">
                         <div class="${bgColor} rounded-lg p-4">
@@ -1248,7 +1325,19 @@
                                 </span>
                                 <span class="text-xs text-gray-500">${time}</span>
                             </div>
-                            <p class="text-gray-800">${feedback.content}</p>
+                            <p class="text-gray-800 mb-2">${feedback.content}</p>
+                            ${canReact ? `
+                                <div class="flex items-center justify-end">
+                                    <button 
+                                        onclick="toggleReaction(${feedback.id}, '${currentUserRole}', ${hasReacted})"
+                                        class="reaction-btn ${hasReacted ? 'reacted' : ''}"
+                                        title="${reactionTooltip || 'Thả tim để phản hồi'}"
+                                    >
+                                        <span class="heart-icon">${hasReacted ? '❤️' : '🤍'}</span>
+                                        ${reactionCount > 0 ? `<span class="reaction-count">${reactionCount}</span>` : ''}
+                                    </button>
+                                </div>
+                            ` : ''}
                         </div>
                     </div>
                 `;
@@ -1293,6 +1382,57 @@
             document.getElementById('feedbackInput').value = '';
             await loadFeedbacks(currentStudentId);
             await loadStudents(); // Reload để cập nhật thời gian trên card
+        }
+
+        // ==================== REACTION FUNCTIONS ====================
+        async function toggleReaction(feedbackId, userRole, hasReacted) {
+            if (!supabase) return;
+
+            try {
+                // Lấy feedback hiện tại
+                const { data: feedback, error: fetchError } = await supabase
+                    .from('feedbacks')
+                    .select('reactions')
+                    .eq('id', feedbackId)
+                    .single();
+
+                if (fetchError) {
+                    console.error('Error fetching feedback:', fetchError);
+                    return;
+                }
+
+                let reactions = feedback.reactions || [];
+
+                if (hasReacted) {
+                    // Xóa reaction của user hiện tại
+                    reactions = reactions.filter(r => r.role !== userRole);
+                } else {
+                    // Thêm reaction mới
+                    reactions.push({
+                        role: userRole,
+                        timestamp: new Date().toISOString()
+                    });
+                }
+
+                // Cập nhật database
+                const { error: updateError } = await supabase
+                    .from('feedbacks')
+                    .update({ reactions: reactions })
+                    .eq('id', feedbackId);
+
+                if (updateError) {
+                    console.error('Error updating reaction:', updateError);
+                    alert('Lỗi cập nhật reaction: ' + updateError.message);
+                    return;
+                }
+
+                // Reload feedbacks để cập nhật UI
+                if (currentStudentId) {
+                    await loadFeedbacks(currentStudentId);
+                }
+            } catch (error) {
+                console.error('Error in toggleReaction:', error);
+            }
         }
 
         async function updateStudentStatus(status) {
