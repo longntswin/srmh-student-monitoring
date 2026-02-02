@@ -267,6 +267,14 @@
                     <input type="text" id="searchInput" placeholder="🔍 Tìm kiếm theo MSSV hoặc Họ tên..."
                         class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                         oninput="searchStudents()" />
+
+                    <!-- Class Filter Dropdown -->
+                    <select id="classFilter"
+                        class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white min-w-[180px]"
+                        onchange="filterByClass()">
+                        <option value="all">🏫 Tất cả lớp</option>
+                    </select>
+
                     <div class="flex gap-2">
                         <button onclick="filterByStatus('attention')"
                             class="px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-lg hover:shadow-lg transition transform hover:scale-105 font-semibold">
@@ -441,6 +449,7 @@
         let currentStudentId = null;
         let allStudents = [];
         let currentFilter = 'all';
+        let currentClassFilter = 'all'; // Bộ lọc theo lớp
         let currentPage = 1;
         let itemsPerPage = 20;
         let supabase = null;
@@ -538,6 +547,54 @@
             document.getElementById('greenCount').textContent = green;
             document.getElementById('yellowCount').textContent = yellow;
             document.getElementById('redCount').textContent = red;
+
+            // Populate class filter dropdown
+            populateClassFilter();
+        }
+
+        // Hàm lấy danh sách lớp và populate dropdown
+        function populateClassFilter() {
+            const classSet = new Set();
+
+            allStudents.forEach(student => {
+                if (student.lop) {
+                    // Lấy tên lớp, loại bỏ dấu {}, [], ()
+                    const classString = student.lop;
+                    const classes = classString.split(',')
+                        .map(c => {
+                            // Loại bỏ các ký tự đặc biệt: {, }, [, ], (, )
+                            return c.trim()
+                                .replace(/[\{\}\[\]\(\)]/g, '')
+                                .trim();
+                        })
+                        .filter(c => c); // Bỏ các chuỗi rỗng
+
+                    classes.forEach(className => classSet.add(className));
+                }
+            });
+
+            // Chuyển Set thành Array và sắp xếp
+            const classList = Array.from(classSet).sort();
+
+            // Populate dropdown
+            const classFilter = document.getElementById('classFilter');
+            const currentValue = classFilter.value; // Lưu giá trị hiện tại
+
+            // Clear options (trừ option đầu tiên "Tất cả lớp")
+            classFilter.innerHTML = '<option value="all">🏫 Tất cả lớp</option>';
+
+            // Thêm các lớp
+            classList.forEach(className => {
+                const option = document.createElement('option');
+                option.value = className;
+                option.textContent = className;
+                classFilter.appendChild(option);
+            });
+
+            // Khôi phục giá trị đã chọn (nếu còn tồn tại)
+            if (classList.includes(currentValue)) {
+                classFilter.value = currentValue;
+            }
         }
 
         function renderStudents() {
@@ -560,6 +617,26 @@
                 });
             } else if (currentFilter !== 'all') {
                 students = students.filter(s => (s.status || 'green') === currentFilter);
+            }
+
+            // Lọc theo lớp
+            if (currentClassFilter !== 'all') {
+                students = students.filter(s => {
+                    if (!s.lop) return false;
+
+                    // Lấy danh sách lớp của sinh viên (loại bỏ dấu {}, [], ())
+                    const classString = s.lop;
+                    const classes = classString.split(',')
+                        .map(c => {
+                            return c.trim()
+                                .replace(/[\{\}\[\]\(\)]/g, '')
+                                .trim();
+                        })
+                        .filter(c => c);
+
+                    // Kiểm tra xem sinh viên có học lớp được chọn không
+                    return classes.includes(currentClassFilter);
+                });
             }
 
             const searchTerm = document.getElementById('searchInput').value.toLowerCase();
@@ -678,11 +755,25 @@
         function filterByStatus(status) {
             currentFilter = status;
             currentPage = 1; // Reset về trang 1 khi lọc
+
+            // Nếu chọn "Hiện tất cả", reset cả bộ lọc lớp
+            if (status === 'all') {
+                currentClassFilter = 'all';
+                document.getElementById('classFilter').value = 'all';
+            }
+
             renderStudents();
         }
 
         function searchStudents() {
             currentPage = 1; // Reset về trang 1 khi tìm kiếm
+            renderStudents();
+        }
+
+        function filterByClass() {
+            const classFilter = document.getElementById('classFilter');
+            currentClassFilter = classFilter.value;
+            currentPage = 1; // Reset về trang 1 khi lọc
             renderStudents();
         }
 
