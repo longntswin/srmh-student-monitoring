@@ -1399,8 +1399,9 @@
                 const currentUserRole = currentUser.role === 'Giảng viên' ? 'GV' : 'CTSV';
                 const hasReacted = reactions.some(r => r.role === currentUserRole);
 
-                // Chỉ hiển thị nút reaction nếu feedback không phải của chính mình
-                const canReact = feedback.role !== currentUserRole;
+                // Kiểm tra xem feedback có phải của mình không
+                const isMyFeedback = feedback.role === currentUserRole;
+                const canReact = !isMyFeedback; // Chỉ có thể thả tim vào feedback của người khác
 
                 // Tạo tooltip hiển thị ai đã react
                 const reactionTooltip = reactions.length > 0
@@ -1417,7 +1418,9 @@
                                 <span class="text-xs text-gray-500">${time}</span>
                             </div>
                             <p class="text-gray-800 mb-2">${feedback.content}</p>
+                            
                             ${canReact ? `
+                                <!-- Nút thả tim cho feedback của người khác -->
                                 <div class="flex items-center justify-end">
                                     <button 
                                         onclick="toggleReaction(${feedback.id}, '${currentUserRole}', ${hasReacted})"
@@ -1427,6 +1430,14 @@
                                         <span class="heart-icon">${hasReacted ? '❤️' : '🤍'}</span>
                                         ${reactionCount > 0 ? `<span class="reaction-count">${reactionCount}</span>` : ''}
                                     </button>
+                                </div>
+                            ` : reactionCount > 0 ? `
+                                <!-- Hiển thị reactions nhận được trên feedback của mình -->
+                                <div class="flex items-center justify-end">
+                                    <div class="flex items-center gap-1 px-3 py-1.5 bg-red-50 rounded-full border border-red-200" title="${reactionTooltip}">
+                                        <span class="text-sm">❤️</span>
+                                        <span class="text-xs font-bold text-red-600">${reactionCount}</span>
+                                    </div>
                                 </div>
                             ` : ''}
                         </div>
