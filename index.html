@@ -371,6 +371,11 @@
             </div>
 
             <div class="p-4 bg-white border-t border-gray-200">
+                <div id="replyContext"
+                    class="hidden mb-2 flex items-center justify-between text-sm bg-blue-50 text-blue-700 px-3 py-1 rounded">
+                    <span>Đang trả lời <b id="replyToName">...</b> ↪️</span>
+                    <button onclick="cancelReply()" class="text-blue-400 hover:text-blue-600">✕</button>
+                </div>
                 <div class="flex gap-2">
                     <input type="text" id="feedbackInput" placeholder="Nhập phản hồi..."
                         class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
@@ -461,33 +466,62 @@
         let currentPage = 1;
         let itemsPerPage = 20;
         let supabase = null;
+        let replyParentId = null;
 
         // ==================== AUTH (KHÔNG PHỤ THUỘC SUPABASE) ====================
-        function login() {
+        async function login() {
             console.log('=== Login ===');
             const code = document.getElementById('accessCode').value.trim();
             console.log('Code:', code);
 
-            if (ACCESS_CODES[code]) {
-                console.log('✅ Valid code');
-                currentUser = { code, role: ACCESS_CODES[code] };
+            if (!supabase) {
+                alert('Đang kết nối đến máy chủ, vui lòng thử lại sau vài giây...');
+                return;
+            }
+
+            try {
+                // Tra cứu mã trong bảng accounts
+                const { data, error } = await supabase
+                    .from('accounts')
+                    .select('*')
+                    .eq('code', code)
+                    .single();
+
+                if (error || !data) {
+                    console.warn('Login failed:', error);
+                    alert('Mã truy cập không hợp lệ!');
+                    return;
+                }
+
+                console.log('✅ Valid code', data);
+
+                // Map role từ DB sang hiển thị
+                let displayRole = data.role;
+                if (data.role === 'GV') displayRole = 'Giảng viên';
+                else if (data.role === 'CNBM') displayRole = 'Chủ nhiệm bộ môn';
+                else if (data.role === 'Admin') displayRole = 'Admin';
+
+                currentUser = {
+                    code: data.code,
+                    role: displayRole,
+                    name: data.name,
+                    rawRole: data.role // GV, CTSV, Admin
+                };
 
                 document.getElementById('loginScreen').classList.add('hidden');
                 document.getElementById('mainApp').classList.remove('hidden');
-                document.getElementById('userRole').textContent = currentUser.role;
+                // Hiển thị: Thầy Hưng (Giảng viên)
+                document.getElementById('userRole').textContent = `${currentUser.name} (${currentUser.role})`;
 
                 // Hiển thị nút xuất báo cáo cho tất cả các role (Admin, GV, CTSV)
                 document.getElementById('exportButton').classList.remove('hidden');
 
-                // Load students nếu Supabase đã sẵn sàng
-                if (supabase) {
-                    loadStudents();
-                    setupRealtimeSubscription();
-                } else {
-                    console.warn('⚠️ Supabase chưa sẵn sàng, đang chờ...');
-                }
-            } else {
-                alert('Mã truy cập không hợp lệ!');
+                loadStudents();
+                setupRealtimeSubscription();
+
+            } catch (err) {
+                console.error('Login error:', err);
+                alert('Có lỗi xảy ra khi đăng nhập. Vui lòng thử lại.');
             }
         }
 
@@ -1508,76 +1542,127 @@
                 return;
             }
 
-            timeline.innerHTML = data.map(feedback => {
+            // Tách root và replies
+            const rootFeedbacks = data.filter(f => !f.parent_id);
+            const allReplies = data.filter(f => f.parent_id);
+
+            const renderItem = (feedback, isReply = false) => {
                 const isGV = feedback.role === 'GV';
-                const bgColor = isGV ? 'bg-blue-100' : 'bg-green-100';
-                const textColor = isGV ? 'text-blue-800' : 'text-green-800';
-                const roleIcon = isGV ? '👨‍🏫' : '👤';
-                const roleText = isGV ? 'Giảng viên' : 'CTSV';
+                const isCNBM = feedback.role === 'CNBM';
+
+                let bgColor = 'bg-green-100';
+                let textColor = 'text-green-800';
+                let roleIcon = '👤';
+
+                if (isGV) {
+                    bgColor = 'bg-blue-100';
+                    textColor = 'text-blue-800';
+                    roleIcon = '👨‍🏫';
+                } else if (isCNBM) {
+                    bgColor = 'bg-purple-100';
+                    textColor = 'text-purple-800';
+                    roleIcon = '🎓';
+                }
+                // Sử dụng tên thật nếu có
+                let defaultName = 'CTSV';
+                if (isGV) defaultName = 'Giảng viên';
+                else if (isCNBM) defaultName = 'Chủ nhiệm bộ môn';
+
+                const authorName = feedback.author_name || defaultName;
                 const time = new Date(feedback.created_at).toLocaleString('vi-VN');
 
                 // Xử lý reactions
                 const reactions = feedback.reactions || [];
                 const reactionCount = reactions.length;
-                const currentUserRole = currentUser.role === 'Giảng viên' ? 'GV' : 'CTSV';
+                const currentUserRole = currentUser.rawRole; // Sử dụng rawRole thay vì map lại
                 const hasReacted = reactions.some(r => r.role === currentUserRole);
-
-                // Kiểm tra xem feedback có phải của mình không
                 const isMyFeedback = feedback.role === currentUserRole;
-                const canReact = !isMyFeedback; // Chỉ có thể thả tim vào feedback của người khác
+                const canReact = !isMyFeedback;
 
-                // Tạo tooltip hiển thị ai đã react
                 const reactionTooltip = reactions.length > 0
                     ? reactions.map(r => r.role === 'GV' ? 'Giảng viên' : 'CTSV').join(', ')
                     : '';
 
                 return `
-                    <div class="timeline-item mb-4">
-                        <div class="${bgColor} rounded-lg p-4">
-                            <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs font-semibold ${textColor}">
-                                    ${roleIcon} ${roleText}
+                    <div class="timeline-item ${isReply ? 'mt-2' : 'mb-4'}">
+                        <div class="${bgColor} rounded-lg p-3 ${isReply ? 'ml-0 text-sm' : ''} shadow-sm">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="font-bold ${textColor} flex items-center gap-1">
+                                    ${roleIcon} ${authorName}
                                 </span>
                                 <span class="text-xs text-gray-500">${time}</span>
                             </div>
-                            <p class="text-gray-800 mb-2">${feedback.content}</p>
+                            <p class="text-gray-800 mb-2 whitespace-pre-wrap">${feedback.content}</p>
                             
-                            ${canReact ? `
-                                <!-- Nút thả tim cho feedback của người khác -->
-                                <div class="flex items-center justify-end">
+                            <div class="flex items-center justify-end gap-3 mt-2">
+                                <!-- Nút Reply (Chỉ hiện cho feedback gốc để tránh nested sâu) -->
+                                ${!isReply ? `
+                                    <button onclick="replyTo(${feedback.id}, '${authorName}')" 
+                                        class="text-xs text-gray-500 hover:text-blue-600 flex items-center gap-1 transition-colors">
+                                        ↪️ Trả lời
+                                    </button>
+                                ` : ''}
+
+                                ${canReact ? `
                                     <button 
                                         onclick="toggleReaction(${feedback.id}, '${currentUserRole}', ${hasReacted})"
-                                        class="reaction-btn ${hasReacted ? 'reacted' : ''}"
-                                        title="${reactionTooltip || 'Thả tim để phản hồi'}"
+                                        class="reaction-btn ${hasReacted ? 'reacted' : ''} text-xs flex items-center gap-1"
+                                        title="${reactionTooltip || 'Thả tim'}"
                                     >
-                                        <span class="heart-icon">${hasReacted ? '❤️' : '🤍'}</span>
-                                        ${reactionCount > 0 ? `<span class="reaction-count">${reactionCount}</span>` : ''}
+                                        <span>${hasReacted ? '❤️' : '🤍'}</span>
+                                        ${reactionCount > 0 ? `<span class="font-bold text-gray-600">${reactionCount}</span>` : ''}
                                     </button>
-                                </div>
-                            ` : reactionCount > 0 ? `
-                                <!-- Hiển thị reactions nhận được trên feedback của mình -->
-                                <div class="flex items-center justify-end">
-                                    <div class="flex items-center gap-1 px-3 py-1.5 bg-red-50 rounded-full border border-red-200" title="${reactionTooltip}">
-                                        <span class="text-sm">❤️</span>
+                                ` : reactionCount > 0 ? `
+                                    <div class="flex items-center gap-1 px-2 py-0.5 bg-white/50 rounded-full" title="${reactionTooltip}">
+                                        <span class="text-xs">❤️</span>
                                         <span class="text-xs font-bold text-red-600">${reactionCount}</span>
                                     </div>
-                                </div>
-                            ` : ''}
+                                ` : ''}
+                            </div>
                         </div>
+                    </div>
+                `;
+            };
+
+            const html = rootFeedbacks.map(root => {
+                const replies = allReplies.filter(r => r.parent_id === root.id); // Lấy replies của root này
+                const renderedRoot = renderItem(root, false);
+                const renderedReplies = replies.map(r => renderItem(r, true)).join('');
+
+                return `
+                    <div>
+                        ${renderedRoot}
+                        ${renderedReplies ? `<div class="ml-8 border-l-2 border-gray-200 pl-4 mb-4">${renderedReplies}</div>` : ''}
                     </div>
                 `;
             }).join('');
 
+            timeline.innerHTML = html;
             timeline.scrollTop = timeline.scrollHeight;
+        }
+
+        function replyTo(id, name) {
+            replyParentId = id;
+            document.getElementById('replyContext').classList.remove('hidden');
+            document.getElementById('replyToName').textContent = name;
+            document.getElementById('feedbackInput').focus();
+            document.getElementById('feedbackInput').placeholder = `Trả lời ${name}...`;
+        }
+
+        function cancelReply() {
+            replyParentId = null;
+            document.getElementById('replyContext').classList.add('hidden');
+            document.getElementById('feedbackInput').placeholder = "Nhập phản hồi...";
         }
 
         async function sendFeedback() {
             if (!supabase) return;
 
-            const content = document.getElementById('feedbackInput').value.trim();
+            const input = document.getElementById('feedbackInput');
+            const content = input.value.trim();
             if (!content || !currentStudentId) return;
 
-            const role = currentUser.role === 'Giảng viên' ? 'GV' : 'CTSV';
+            const role = currentUser.rawRole; // Use rawRole from DB
 
             // Insert feedback
             const { error } = await supabase
@@ -1585,7 +1670,9 @@
                 .insert({
                     student_id: currentStudentId,
                     role: role,
-                    content: content
+                    content: content,
+                    author_name: currentUser.name, // Gửi tên người đang đăng nhập
+                    parent_id: replyParentId // Gửi ID cha nếu đang reply
                 });
 
             if (error) {
@@ -1594,19 +1681,19 @@
                 return;
             }
 
-            // Cập nhật updated_at của sinh viên để đưa lên đầu danh sách
-            const { error: updateError } = await supabase
+            // Reset input & reply state
+            input.value = '';
+            cancelReply();
+
+            // Cập nhật updated_at của sinh viên để đưa lên đầu danh sách (chỉ khi là feedback mới, reply có cần không? Có lẽ cũng nên)
+            await supabase
                 .from('students')
                 .update({ updated_at: new Date().toISOString() })
                 .eq('id', currentStudentId);
 
-            if (updateError) {
-                console.error('Error updating student timestamp:', updateError);
-            }
-
-            document.getElementById('feedbackInput').value = '';
+            // Reload UI
             await loadFeedbacks(currentStudentId);
-            await loadStudents(); // Reload để cập nhật thời gian trên card
+            await loadStudents(); // Reload list to update 'New' status/order
         }
 
         // ==================== REACTION FUNCTIONS ====================
