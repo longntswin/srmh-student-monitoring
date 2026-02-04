@@ -545,9 +545,7 @@
             // Gắn feedback gần nhất vào mỗi sinh viên
             allStudents.forEach(student => {
                 const studentFeedbacks = data.filter(f => f.student_id === student.id);
-                // Tìm feedback gần nhất KHÔNG phải là thông báo cập nhật trạng thái tự động
-                const latestRealFeedback = studentFeedbacks.find(f => !f.content.trim().startsWith('Trạng thái đã được cập nhật thành:'));
-                student.latestFeedback = latestRealFeedback || null;
+                student.latestFeedback = studentFeedbacks.length > 0 ? studentFeedbacks[0] : null;
             });
         }
 
@@ -973,6 +971,11 @@
             itemsPerPage = parseInt(select.value);
             currentPage = 1; // Reset về trang 1
             renderStudents();
+        }
+
+
+        function getStatusEmoji(status) {
+            return { green: '🟢', yellow: '🟡', red: '🔴' }[status] || '❓';
         }
 
         // Hàm tính thời gian đã qua
@@ -1660,6 +1663,13 @@
         async function updateStudentStatus(status) {
             if (!supabase || !currentStudentId) return;
 
+            // Hỏi lý do thay đổi trạng thái
+            const reason = prompt("Vui lòng nhập lý do thay đổi trạng thái (bắt buộc):");
+            if (!reason || reason.trim() === "") {
+                alert("Bạn phải nhập lý do để thay đổi trạng thái!");
+                return;
+            }
+
             const { error } = await supabase
                 .from('students')
                 .update({
@@ -1674,20 +1684,23 @@
                 return;
             }
 
+            // Gửi feedback tự động kèm lý do
+            const statusText = { green: 'Ổn định', yellow: 'Theo dõi', red: 'Cảnh báo' }[status];
+            const feedbackContent = `Trạng thái đã được cập nhật thành: ${statusText} ${getStatusEmoji(status)}. Lý do: ${reason}`;
+
+            await supabase.from('feedbacks').insert({
+                student_id: currentStudentId,
+                content: feedbackContent,
+                role: currentUser.role
+            });
+
             // Cập nhật visual feedback cho nút trạng thái
             updateModalStatusButtonStyles(status);
 
             await loadStudents();
+            await loadFeedbacks(currentStudentId);
 
-            // Xác định role dựa trên người dùng hiện tại
-            const role = currentUser.role === 'Giảng viên' ? 'GV' : 'CTSV';
-            const statusText = { green: 'Ổn định 🟢', yellow: 'Theo dõi 🟡', red: 'Cảnh báo 🔴' }[status];
 
-            await supabase.from('feedbacks').insert({
-                student_id: currentStudentId,
-                role: role,
-                content: `Trạng thái đã được cập nhật thành: ${statusText}`
-            });
         }
 
         function updateModalStatusButtonStyles(activeStatus) {
